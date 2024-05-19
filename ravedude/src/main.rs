@@ -2,6 +2,7 @@ use anyhow::Context as _;
 use colored::Colorize as _;
 use structopt::clap::AppSettings;
 
+use std::str::FromStr;
 use std::thread;
 use std::time::Duration;
 
@@ -12,6 +13,27 @@ mod ui;
 
 /// This represents the minimum (Major, Minor) version raverdude requires avrdude to meet.
 const MIN_VERSION_AVRDUDE: (u8, u8) = (6, 3);
+
+#[derive(Debug)]
+enum OutputMode {
+    Ascii,
+    Hex,
+    Dec,
+    Bin,
+}
+
+impl FromStr for OutputMode {
+    type Err = anyhow::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ascii" => Ok(Self::Ascii),
+            "hex" => Ok(Self::Hex),
+            "dec" => Ok(Self::Dec),
+            "bin" => Ok(Self::Bin),
+            _ => Err(anyhow::anyhow!("unknown output mode")),
+        }
+    }
+}
 
 /// ravedude is a rust wrapper around avrdude for providing the smoothest possible development
 /// experience with rust on AVR microcontrollers.
@@ -79,6 +101,12 @@ struct Args {
     /// If no binary is given, flashing will be skipped.
     #[structopt(name = "BINARY", parse(from_os_str))]
     bin: Option<std::path::PathBuf>,
+
+    /// Output mode.
+    ///
+    /// Can be ascii, hex, dec or bin
+    #[structopt(short = "o")]
+    output_mode: Option<OutputMode>,
 }
 
 fn main() {
@@ -118,7 +146,7 @@ fn ravedude() -> anyhow::Result<()> {
         }
     }
 
-    let port = match args.port {
+    let port = match args.port.clone() {
         Some(port) => Ok(Some(port)),
         None => match board.guess_port() {
             Some(Ok(port)) => Ok(Some(port)),
@@ -160,17 +188,7 @@ fn ravedude() -> anyhow::Result<()> {
     }
 
     if args.open_console {
-        let baudrate = args
-            .baudrate
-            .context("-b/--baudrate is needed for the serial console")?;
-
-        let port = port.context("console can only be opened for devices with USB-to-Serial")?;
-
-        task_message!("Console", "{} at {} baud", port.display(), baudrate);
-        task_message!("", "{}", "CTRL+C to exit.".dimmed());
-        // Empty line for visual consistency
-        eprintln!();
-        console::open(&port, baudrate)?;
+        console::open(args)?;
     } else if args.bin.is_none() && port.is_some() {
         warning!("you probably meant to add -c/--open-console?");
     }

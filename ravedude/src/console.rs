@@ -2,7 +2,36 @@ use anyhow::Context as _;
 use std::io::Read as _;
 use std::io::Write as _;
 
-pub fn open(port: &std::path::Path, baudrate: u32) -> anyhow::Result<()> {
+use anyhow::Context as _;
+use colored::Colorize as _;
+
+use crate::task_message;
+use crate::Args;
+use crate::OutputMode::*;
+
+pub fn open(args: Args) -> anyhow::Result<()> {
+    let baudrate = args
+        .baudrate
+        .context("-b/--baudrate is needed for the serial console")?;
+
+    let port = args
+        .port
+        .context("console can only be opened for devices with USB-to-Serial")?;
+
+    task_message!("Console", "{} at {} baud", port.display(), baudrate);
+    task_message!(
+        "Output",
+        "{}",
+        match args.output_mode {
+            Some(Ascii) | None => "ascii",
+            Some(Hex) => "hexadecimal",
+            Some(Dec) => "decimal",
+            Some(Bin) => "binary",
+        }
+    );
+    task_message!("", "{}", "CTRL+C to exit.".dimmed());
+    // Empty line for visual consistency
+    eprintln!();
     let mut rx = serialport::new(port.to_string_lossy(), baudrate)
         .timeout(std::time::Duration::from_secs(2))
         .open_native()
@@ -20,6 +49,7 @@ pub fn open(port: &std::path::Path, baudrate: u32) -> anyhow::Result<()> {
     })
     .context("failed setting a CTRL+C handler")?;
 
+    let mut byte_count = 0;
     // Spawn a thread for the receiving end because stdio is not portably non-blocking...
     std::thread::spawn(move || loop {
         #[cfg(not(target_os = "windows"))]
@@ -41,7 +71,46 @@ pub fn open(port: &std::path::Path, baudrate: u32) -> anyhow::Result<()> {
                         }
                     }
                 }
-                stdout.write(&buf[..count]).unwrap();
+                match args.output_mode {
+                    Some(Ascii) | None => {
+                        stdout.write_all(&buf).unwrap();
+                    }
+                    _ => {
+                        for byte in &buf[..count] {
+                            byte_count += 1;
+                            match args.output_mode {
+                                Some(Ascii) | None => unreachable!(),
+                                Some(Hex) => {
+                                    write!(stdout, "{:02x} ", byte).unwrap();
+                                    if byte_count % 4 == 0 {
+                                        write!(stdout, " ").unwrap();
+                                    }
+                                    if byte_count % 16 == 0 {
+                                        writeln!(stdout).unwrap();
+                                    }
+                                }
+                                Some(Dec) => {
+                                    write!(stdout, "{:03} ", byte).unwrap();
+                                    if byte_count % 4 == 0 {
+                                        write!(stdout, " ").unwrap();
+                                    }
+                                    if byte_count % 16 == 0 {
+                                        writeln!(stdout).unwrap();
+                                    }
+                                }
+                                Some(Bin) => {
+                                    write!(stdout, "{:08b} ", byte).unwrap();
+                                    if byte_count % 4 == 0 {
+                                        write!(stdout, " ").unwrap();
+                                    }
+                                    if byte_count % 8 == 0 {
+                                        writeln!(stdout).unwrap();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 stdout.flush().unwrap();
             }
             Err(e) => {
