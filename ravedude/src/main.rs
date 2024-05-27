@@ -130,14 +130,14 @@ struct Args {
     /// hex (0x) and bin (0b) notations are supported.
     /// matching chars/bytes are NOT removed
     /// to add newlines after \n (in non-ascii mode), use \n, 0x0a or 0b00001010
-    #[structopt(long = "newline-on", parse(try_from_str = parse_newline_on))]
+    #[structopt(long = "newline-on", parse(try_from_str = parse_newline_on), verbatim_doc_comment)]
     newline_on: Option<char>,
 
     /// Print a newline after n bytes
     /// not used with output_mode ascii
     /// defaults to 16 for hex and dec and 8 for bin
     /// if dividable by 4, bytes will be grouped to 4
-    #[structopt(long = "newline-after")]
+    #[structopt(long = "newline-after", verbatim_doc_comment)]
     newline_after: Option<u8>,
 
     /// Which board to interact with.
