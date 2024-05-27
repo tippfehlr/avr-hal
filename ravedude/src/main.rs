@@ -120,7 +120,6 @@ struct Args {
     debug_avrdude: bool,
 
     /// Output mode.
-    ///
     /// Can be ascii, hex, dec or bin
     #[structopt(short = "o")]
     output_mode: Option<OutputMode>,
